@@ -20,6 +20,18 @@ export interface CategoryBundle {
   audits: RawAuditItem[];
 }
 
+/** Core Web Vitals and Lighthouse timing metrics for charts */
+export interface PerformanceMetric {
+  id: string;
+  title: string;
+  shortLabel: string;
+  value: number;
+  unit: string;
+  displayValue: string;
+  /** Lighthouse audit score 0–1 (null if not scored) */
+  score: number | null;
+}
+
 export interface ContentSignals {
   title: string | null;
   titleLength: number;
@@ -41,10 +53,17 @@ export interface AnalyzePayload {
   content: ContentSignals;
 }
 
+export type CodeLanguage = "html" | "css" | "javascript";
+
 export interface HumanizedFinding {
+  /** Issue title */
   summary: string;
   impact: string;
+  /** AI Fix — actionable steps */
   fix: string;
+  /** Copy-paste ready snippet */
+  sampleCode?: string;
+  codeLanguage?: CodeLanguage;
   relatedAuditIds?: string[];
 }
 
@@ -54,10 +73,20 @@ export interface HumanizedSection {
   findings: HumanizedFinding[];
 }
 
+export interface AuditMeta {
+  lighthouseVersion: string;
+  /** mobile (Lighthouse default) or desktop — affects performance scoring */
+  formFactor: "mobile" | "desktop";
+  /** UX and Content are computed by this app, not Chrome Lighthouse */
+  extraCategories: string[];
+}
+
 export interface AnalyzeResponse {
   url: string;
   fetchedAt: string;
   scores: Record<string, number | null>;
+  performanceMetrics: PerformanceMetric[];
+  auditMeta: AuditMeta;
   raw: AnalyzePayload;
   report: HumanizedSection[];
   aiModel?: string;

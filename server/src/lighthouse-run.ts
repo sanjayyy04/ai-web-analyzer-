@@ -1,6 +1,23 @@
 import lighthouse from "lighthouse";
+import desktopConfig from "lighthouse/core/config/desktop-config.js";
 import * as chromeLauncher from "chrome-launcher";
-import type { CategoryBundle, RawAuditItem } from "./types.js";
+import type { CategoryBundle, PerformanceMetric, RawAuditItem } from "./types.js";
+
+export type LighthouseFormFactor = "mobile" | "desktop";
+
+function resolveFormFactor(): LighthouseFormFactor {
+  const raw = process.env.LIGHTHOUSE_FORM_FACTOR?.trim().toLowerCase();
+  return raw === "desktop" ? "desktop" : "mobile";
+}
+
+const PERF_METRIC_IDS: { id: string; shortLabel: string }[] = [
+  { id: "first-contentful-paint", shortLabel: "FCP" },
+  { id: "largest-contentful-paint", shortLabel: "LCP" },
+  { id: "total-blocking-time", shortLabel: "TBT" },
+  { id: "cumulative-layout-shift", shortLabel: "CLS" },
+  { id: "speed-index", shortLabel: "Speed Index" },
+  { id: "interactive", shortLabel: "TTI" },
+];
 
 const LH_CATEGORIES = ["performance", "accessibility", "best-practices", "seo"] as const;
 
@@ -10,7 +27,29 @@ interface AuditLike {
   score: number | null;
   scoreDisplayMode: string;
   displayValue?: string;
+  numericValue?: number;
+  numericUnit?: string;
   details?: unknown;
+}
+
+function extractPerformanceMetrics(
+  audits: Record<string, AuditLike | undefined>,
+): PerformanceMetric[] {
+  const metrics: PerformanceMetric[] = [];
+  for (const { id, shortLabel } of PERF_METRIC_IDS) {
+    const audit = audits[id];
+    if (!audit || audit.numericValue === undefined) continue;
+    metrics.push({
+      id,
+      title: audit.title,
+      shortLabel,
+      value: audit.numericValue,
+      unit: audit.numericUnit || "unitless",
+      displayValue: audit.displayValue || String(audit.numericValue),
+      score: audit.score,
+    });
+  }
+  return metrics;
 }
 
 function auditToItem(id: string, audit: AuditLike): RawAuditItem | null {
@@ -42,8 +81,11 @@ function auditToItem(id: string, audit: AuditLike): RawAuditItem | null {
 
 export async function runLighthouseAudit(url: string): Promise<{
   lighthouseVersion: string;
+  formFactor: LighthouseFormFactor;
   categories: Record<string, CategoryBundle>;
+  performanceMetrics: PerformanceMetric[];
 }> {
+  const formFactor = resolveFormFactor();
   const chrome = await chromeLauncher.launch({
     chromeFlags: ["--headless", "--no-sandbox", "--disable-gpu"],
   });
@@ -57,7 +99,8 @@ export async function runLighthouseAudit(url: string): Promise<{
       maxWaitForLoadMs: 90000,
     };
 
-    const runnerResult = await lighthouse(url, options);
+    const lhConfig = formFactor === "desktop" ? desktopConfig : undefined;
+    const runnerResult = await lighthouse(url, options, lhConfig);
     const lhr = runnerResult?.lhr;
     if (!lhr) {
       throw new Error("Lighthouse returned no result");
@@ -86,7 +129,11 @@ export async function runLighthouseAudit(url: string): Promise<{
 
     return {
       lighthouseVersion: lhr.lighthouseVersion || "unknown",
+      formFactor,
       categories,
+      performanceMetrics: extractPerformanceMetrics(
+        lhr.audits as Record<string, AuditLike | undefined>,
+      ),
     };
   } finally {
     await chrome.kill();

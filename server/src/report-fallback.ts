@@ -1,4 +1,5 @@
 import type { AnalyzePayload, CategoryKey, HumanizedFinding, HumanizedSection } from "./types.js";
+import { suggestFix } from "./fix-snippets.js";
 
 const CATEGORY_LABEL: Record<CategoryKey, string> = {
   seo: "SEO",
@@ -11,15 +12,56 @@ const CATEGORY_LABEL: Record<CategoryKey, string> = {
 
 const LH_ORDER = ["seo", "accessibility", "performance", "best-practices"] as const;
 
-function bundleToFindings(bundle: { audits: { id: string; title: string; description: string; displayValue?: string }[] }): HumanizedFinding[] {
-  return bundle.audits.slice(0, 12).map((a) => ({
+function auditToFinding(a: {
+  id: string;
+  title: string;
+  description: string;
+  displayValue?: string;
+}): HumanizedFinding {
+  const impact = stripHtml(a.description).slice(0, 500);
+  const suggestion = suggestFix(a.id, a.title, impact);
+
+  const finding: HumanizedFinding = {
     summary: a.title,
-    impact: stripHtml(a.description).slice(0, 500),
-    fix: a.displayValue
-      ? `Start with Lighthouse for “${a.title}”. Observed: ${a.displayValue}.`
-      : `Review Lighthouse guidance for “${a.title}” and apply the recommended fix.`,
+    impact,
+    fix: suggestion?.fixHint
+      ? suggestion.fixHint
+      : a.displayValue
+        ? `Review Lighthouse for “${a.title}”. Observed: ${a.displayValue}.`
+        : `Apply the recommended fix for “${a.title}” from Lighthouse documentation.`,
     relatedAuditIds: [a.id],
-  }));
+  };
+
+  if (suggestion) {
+    finding.sampleCode = suggestion.sampleCode;
+    finding.codeLanguage = suggestion.codeLanguage;
+  }
+
+  return finding;
+}
+
+function bundleToFindings(bundle: {
+  audits: { id: string; title: string; description: string; displayValue?: string }[];
+}): HumanizedFinding[] {
+  return bundle.audits.slice(0, 12).map(auditToFinding);
+}
+
+function contentFinding(
+  summary: string,
+  impact: string,
+  auditId: string,
+  titleForSuggest: string
+): HumanizedFinding {
+  const suggestion = suggestFix(auditId, titleForSuggest, impact);
+  return {
+    summary,
+    impact,
+    fix: suggestion?.fixHint ?? "Update the HTML as shown in the sample below.",
+    relatedAuditIds: [auditId],
+    ...(suggestion
+      ? { sampleCode: suggestion.sampleCode, codeLanguage: suggestion.codeLanguage }
+      : {}),
+  };
 }
 
 export function buildFallbackReport(raw: AnalyzePayload): HumanizedSection[] {
@@ -38,35 +80,58 @@ export function buildFallbackReport(raw: AnalyzePayload): HumanizedSection[] {
   const contentFindings: HumanizedFinding[] = [];
 
   if (raw.content.titleLength === 0) {
-    contentFindings.push({
-      summary: "Missing or empty page title",
-      impact: "Search results and browser tabs will not describe the page clearly.",
-      fix: "Add a concise <title> in the document head (typically 50–60 characters).",
-    });
+    contentFindings.push(
+      contentFinding(
+        "Missing or empty page title",
+        "Search results and browser tabs will not describe the page clearly.",
+        "document-title",
+        "missing page title"
+      )
+    );
   }
 
   if (raw.content.metaDescriptionLength === 0) {
-    contentFindings.push({
-      summary: "Meta description missing",
-      impact: "Search snippets may be auto-generated and less compelling.",
-      fix: 'Add <meta name="description" content="…"> with a clear summary of the page.',
-    });
+    contentFindings.push(
+      contentFinding(
+        "Meta description missing",
+        "Search snippets may be auto-generated and less compelling.",
+        "meta-description",
+        "missing meta description"
+      )
+    );
   }
 
   if (raw.content.h1Count === 0) {
-    contentFindings.push({
-      summary: "No H1 heading found",
-      impact: "Users and search engines get a weaker signal about the primary topic.",
-      fix: "Use a single descriptive H1 near the top of the main content.",
-    });
+    contentFindings.push(
+      contentFinding(
+        "No H1 heading found",
+        "Users and search engines get a weaker signal about the primary topic.",
+        "ux-h1",
+        "missing h1"
+      )
+    );
   }
 
   if (raw.content.langAttribute === null) {
-    contentFindings.push({
-      summary: 'Missing lang attribute on <html>',
-      impact: "Assistive technologies may mispronounce content or pick the wrong language model.",
-      fix: 'Set <html lang="en"> (or the correct language code) on the root element.',
-    });
+    contentFindings.push(
+      contentFinding(
+        'Missing lang attribute on <html>',
+        "Assistive technologies may mispronounce content or pick the wrong language.",
+        "html-has-lang",
+        "missing lang"
+      )
+    );
+  }
+
+  if (raw.content.imagesMissingAlt > 0) {
+    contentFindings.push(
+      contentFinding(
+        `${raw.content.imagesMissingAlt} image(s) missing alt text`,
+        "Screen readers cannot describe images; SEO image context is lost.",
+        "ux-image-alt",
+        "images missing alt"
+      )
+    );
   }
 
   sections.push({

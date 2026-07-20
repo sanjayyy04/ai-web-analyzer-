@@ -1,37 +1,74 @@
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { AnalyzePayload, HumanizedSection } from "./types.js";
 import { buildFallbackReport } from "./report-fallback.js";
 
-const SYSTEM = `You are a senior web engineer writing a concise developer report.
-You receive JSON with Lighthouse-style audit items plus HTML-derived content signals.
-Convert technical findings into clear, actionable guidance.
+const SYSTEM = `You are a senior web engineer writing a developer report with FIXES and SAMPLE CODE.
+You receive JSON with Lighthouse audit items plus HTML content signals.
+
+For each finding provide:
+- summary: short issue title (what is wrong)
+- impact: why it matters for users, SEO, or performance
+- fix: "AI Fix" — 1–3 sentences with concrete remediation steps
+- sampleCode: REQUIRED when a code change helps — minimal copy-paste snippet (HTML/CSS/JS). No markdown fences. Escape quotes in JSON.
+- codeLanguage: "html" | "css" | "javascript"
+- relatedAuditIds: optional Lighthouse audit ids from input
+
+Examples:
+- Slow hero image → fix mentions WebP + lazy-load; sampleCode: <img loading="lazy" src="hero.webp" alt="..." />
+- Missing alt → sampleCode: <img src="x.jpg" alt="Descriptive text" />
+- Missing viewport → sampleCode: <meta name="viewport" content="width=device-width, initial-scale=1" />
 
 Rules:
-- Use short paragraphs and bullet-style clarity in the "fix" field when helpful.
-- Prefer accurate, conservative claims—do not invent metrics not present in input.
-- For each section, include 3–8 findings when possible; fewer if input is small.
-- Categories must be exactly one of: seo, accessibility, performance, best-practices, ux, content
-- "ux" should focus on user friction inferred from the provided UX audit items (if any) and cross-cutting signals.
-- "content" should discuss title/description/headings/language/body text signals.
+- Be accurate; only suggest changes grounded in the audit data.
+- Prefer real-world snippets developers can paste into their project.
+- 3–8 findings per section when input allows.
+- Categories: seo, accessibility, performance, best-practices, ux, content
 
-Return ONLY valid JSON with this shape:
+Return ONLY valid JSON:
 {
   "report": [
     {
-      "category": "seo",
+      "category": "performance",
       "headline": "string",
       "findings": [
-        { "summary": "string", "impact": "string", "fix": "string", "relatedAuditIds": ["optional"] }
+        {
+          "summary": "string",
+          "impact": "string",
+          "fix": "string",
+          "sampleCode": "string",
+          "codeLanguage": "html",
+          "relatedAuditIds": ["audit-id"]
+        }
       ]
     }
   ]
 }`;
 
-export async function humanizeWithOpenAI(
+const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+
+function extractJson(text: string): string {
+  const trimmed = text.trim();
+  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) return fence[1].trim();
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start !== -1 && end !== -1) return trimmed.slice(start, end + 1);
+  return trimmed;
+}
+
+export async function humanizeWithGemini(
   raw: AnalyzePayload,
   apiKey: string
 ): Promise<{ report: HumanizedSection[]; model: string }> {
-  const client = new OpenAI({ apiKey });
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_MODEL,
+    systemInstruction: SYSTEM,
+    generationConfig: {
+      temperature: 0.3,
+      responseMimeType: "application/json",
+    },
+  });
 
   const userPayload = {
     url: raw.url,
@@ -40,33 +77,33 @@ export async function humanizeWithOpenAI(
     content: raw.content,
   };
 
-  const completion = await client.chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature: 0.3,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: SYSTEM },
-      {
-        role: "user",
-        content: `Analyze and return JSON only.\n\nINPUT:\n${JSON.stringify(userPayload)}`,
-      },
-    ],
-  });
+  const result = await model.generateContent(
+    `Analyze this website audit data and return JSON only.\n\nINPUT:\n${JSON.stringify(userPayload)}`,
+  );
 
-  const text = completion.choices[0]?.message?.content;
+  const text = result.response.text();
   if (!text) {
     return { report: buildFallbackReport(raw), model: "fallback" };
   }
 
   try {
-    const parsed = JSON.parse(text) as { report?: HumanizedSection[] };
+    const parsed = JSON.parse(extractJson(text)) as { report?: HumanizedSection[] };
     if (!parsed.report || !Array.isArray(parsed.report)) {
       return { report: buildFallbackReport(raw), model: "fallback" };
     }
-    return { report: parsed.report, model: "gpt-4o-mini" };
+    return { report: parsed.report, model: GEMINI_MODEL };
   } catch {
     return { report: buildFallbackReport(raw), model: "fallback" };
   }
+}
+
+/** Resolve Gemini key from env (supports GEMINI_API_KEY or legacy OPENAI_API_KEY slot). */
+export function getGeminiApiKey(): string | undefined {
+  const key =
+    process.env.GEMINI_API_KEY?.trim() ||
+    process.env.GOOGLE_API_KEY?.trim() ||
+    process.env.OPENAI_API_KEY?.trim();
+  return key || undefined;
 }
 
 export function humanizeOffline(raw: AnalyzePayload): HumanizedSection[] {

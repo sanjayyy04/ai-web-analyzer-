@@ -9,14 +9,13 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "ai-website-analyzer": "file:..",
+    "@google/generative-ai": "^0.21.0",
     "cheerio": "^1.0.0",
     "chrome-launcher": "^1.1.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
-    "lighthouse": "^12.2.1",
-    "openai": "^4.73.0"
+    "lighthouse": "^12.2.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

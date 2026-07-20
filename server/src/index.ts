@@ -1,7 +1,11 @@
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
-import { humanizeOffline, humanizeWithOpenAI } from "./ai.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { getGeminiApiKey, humanizeOffline, humanizeWithGemini } from "./ai.js";
+import { enrichReport } from "./enrich-findings.js";
 import { analyzeContentSignals, emptyContentSignals } from "./content.js";
 import { runLighthouseAudit } from "./lighthouse-run.js";
 import { buildSyntheticUxCategory } from "./synthetic-ux.js";
@@ -10,8 +14,24 @@ import { normalizeUrl } from "./url.js";
 
 dotenv.config();
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const isProd = process.env.NODE_ENV === "production";
+const clientDist = path.resolve(__dirname, "../../client/dist");
+
 const app = express();
-app.use(cors());
+
+const allowedOrigins = (process.env.CLIENT_ORIGIN || "http://localhost:5173")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors(
+    isProd
+      ? { origin: allowedOrigins }
+      : { origin: true },
+  ),
+);
 app.use(express.json({ limit: "1mb" }));
 
 function heuristicContentScore(c: ContentSignals): number {
@@ -26,7 +46,7 @@ function heuristicContentScore(c: ContentSignals): number {
 }
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true });
+  res.json({ ok: true, mode: isProd ? "production" : "development" });
 });
 
 app.post("/api/analyze", async (req, res) => {
@@ -65,22 +85,34 @@ app.post("/api/analyze", async (req, res) => {
       content: contentSignals,
     };
 
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = getGeminiApiKey();
     let report;
     let aiModel: string | undefined;
     let note: string | undefined;
 
     if (apiKey) {
-      const result = await humanizeWithOpenAI(payload, apiKey);
-      report = result.report;
-      aiModel = result.model;
-      if (result.model === "fallback") {
-        note = "AI returned an unexpected format; showing rule-based summaries.";
+      try {
+        const result = await humanizeWithGemini(payload, apiKey);
+        report = result.report;
+        aiModel = result.model;
+        if (result.model === "fallback") {
+          note = "Gemini returned an unexpected format; showing rule-based fixes with sample code.";
+        } else {
+          note = `Report enhanced by Google Gemini (${result.model}).`;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        report = humanizeOffline(payload);
+        aiModel = "fallback";
+        note = `Gemini API error: ${msg}. Showing rule-based fixes with sample code.`;
       }
     } else {
       report = humanizeOffline(payload);
-      note = "Set OPENAI_API_KEY in server/.env to enable AI-enhanced summaries.";
+      note =
+        "Set GEMINI_API_KEY in server/.env for AI-powered fixes. Showing rule-based fixes with sample code.";
     }
+
+    report = enrichReport(report, payload);
 
     const scores: Record<string, number | null> = {};
     for (const [k, v] of Object.entries(payload.categories)) {
@@ -92,6 +124,12 @@ app.post("/api/analyze", async (req, res) => {
       url,
       fetchedAt: payload.fetchedAt,
       scores,
+      performanceMetrics: lh.value.performanceMetrics,
+      auditMeta: {
+        lighthouseVersion: lh.value.lighthouseVersion,
+        formFactor: lh.value.formFactor,
+        extraCategories: ["ux", "content"],
+      },
       raw: payload,
       report,
       aiModel,
@@ -105,7 +143,26 @@ app.post("/api/analyze", async (req, res) => {
   }
 });
 
+if (isProd && fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) {
+      next();
+      return;
+    }
+    res.sendFile(path.join(clientDist, "index.html"));
+  });
+} else if (isProd) {
+  console.warn(
+    `Production mode: client build not found at ${clientDist}. Run "npm run build" from project root.`,
+  );
+}
+
 const port = Number(process.env.PORT) || 8787;
 app.listen(port, () => {
-  console.log(`AI Web Analyzer API listening on http://localhost:${port}`);
+  if (isProd && fs.existsSync(clientDist)) {
+    console.log(`AI Web Analyzer running at http://localhost:${port}`);
+  } else {
+    console.log(`AI Web Analyzer API listening on http://localhost:${port}`);
+  }
 });

@@ -5,6 +5,9 @@
 @layer base {
   html {
     @apply antialiased;
+    scroll-behavior: smooth;
+    scroll-padding-top: 4.5rem;
+    scroll-snap-type: y proximity;
   }
   html:not(.dark) {
     color-scheme: light;
@@ -16,6 +19,33 @@
   }
   body {
     min-height: 100vh;
+    overflow-x: hidden;
+    overscroll-behavior-y: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+      scroll-snap-type: none;
+    }
+  }
+}
+
+@layer components {
+  /* Full-width viewport panels — GPU-friendly CSS snap (no JS scroll hijack) */
+  .snap-section {
+    scroll-snap-align: start;
+    scroll-snap-stop: normal;
+    width: 100%;
+    contain: layout style;
+  }
+
+  .snap-section-screen {
+    min-height: calc(100svh - 4.5rem);
+  }
+
+  .snap-section-auto {
+    min-height: calc(100svh - 4.5rem);
   }
 }
 
