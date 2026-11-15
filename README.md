@@ -62,7 +62,7 @@ GitHub Pages hosts only the static frontend; it does not run the Express/Lightho
 
 ## Deploy backend to Render
 
-Create a Render Web Service using the repository root as the build context and `Dockerfile` as the Dockerfile path. The image installs Chromium for Lighthouse, runs the API only, and listens on Render's `PORT`. Set the optional Render health check path to `/api/health`.
+Create a Render Web Service using the repository root as the build context and `Dockerfile` as the Dockerfile path. The image installs Google Chrome Stable for Lighthouse, runs the API only, and listens on Render's `PORT`. Set the optional Render health check path to `/api/health`. Do not override `CHROME_PATH` in Render unless it points to a current Chrome/Chromium executable.
 
 The Pages origin `https://sanjayyy04.github.io` is allowed by the backend by default. Set `CLIENT_ORIGIN` in Render only if you need to allow additional frontend origins. Set `GEMINI_API_KEY` in Render only if AI-enhanced reports are desired.
 
