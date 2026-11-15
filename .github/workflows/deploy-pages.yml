@@ -30,7 +30,12 @@ jobs:
           cache-dependency-path: client/package-lock.json
 
       - name: Install frontend dependencies
-        run: npm ci --prefix client
+        run: npm ci --include=optional --prefix client
+
+      - name: Install Rollup Linux native package
+        run: |
+          ROLLUP_VERSION=$(node -p "require('./client/node_modules/rollup/package.json').version")
+          npm install --no-save --package-lock=false --prefix client "@rollup/rollup-linux-x64-gnu@$ROLLUP_VERSION"
 
       - name: Build frontend
         run: npm run build --prefix client
