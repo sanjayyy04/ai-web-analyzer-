@@ -21,10 +21,10 @@ const clientDist = path.resolve(__dirname, "../../client/dist");
 
 const app = express();
 
-const allowedOrigins = (process.env.CLIENT_ORIGIN || "http://localhost:5173")
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
+const allowedOrigins = [
+  "https://sanjayyy04.github.io",
+  ...(process.env.CLIENT_ORIGIN || "http://localhost:5173").split(","),
+].map((o) => o.trim()).filter(Boolean);
 
 app.use(
   cors(
