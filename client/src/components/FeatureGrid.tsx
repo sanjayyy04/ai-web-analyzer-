@@ -1,4 +1,5 @@
 import { SquareFrame } from "./SquareFrame";
+import { ResponsiveCarousel } from "./ResponsiveCarousel";
 
 const ITEMS = [
   {
@@ -29,17 +30,18 @@ const ITEMS = [
 
 export function FeatureGrid() {
   return (
-    <div className="grid w-full gap-6 sm:grid-cols-2 lg:grid-cols-3">
-      {ITEMS.map((item, i) => (
+    <ResponsiveCarousel
+      ariaLabel="Website audit categories"
+      className="grid w-full gap-6 sm:grid-cols-2 lg:grid-cols-3"
+    >
+      {ITEMS.map((item) => (
         <SquareFrame
           key={item.k}
           title={item.k}
-          delayClass={i % 2 === 0 ? "animate-float" : "animate-float-slow"}
-          style={{ animationDelay: `${i * 0.12}s` }}
         >
           {item.body}
         </SquareFrame>
       ))}
-    </div>
+    </ResponsiveCarousel>
   );
 }

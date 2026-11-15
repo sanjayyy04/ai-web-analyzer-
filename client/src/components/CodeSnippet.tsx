@@ -20,8 +20,8 @@ export function CodeSnippet({
   }
 
   return (
-    <div className="mt-3 overflow-hidden rounded-xl border border-slate-300/80 bg-slate-950 dark:border-white/15">
-      <div className="flex items-center justify-between border-b border-white/10 bg-slate-900 px-3 py-2">
+    <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel-strong)]">
+      <div className="flex items-center justify-between border-b border-white/10 bg-[var(--surface-subtle)] px-3 py-2">
         <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
           Sample code · {language}
         </span>

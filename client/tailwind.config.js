@@ -4,6 +4,15 @@ export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
+      borderRadius: {
+        DEFAULT: "0.125rem",
+        sm: "0.125rem",
+        md: "0.25rem",
+        lg: "0.375rem",
+        xl: "0.5rem",
+        "2xl": "0.625rem",
+        "3xl": "0.75rem",
+      },
       fontFamily: {
         sans: ["DM Sans", "system-ui", "sans-serif"],
         display: ["Outfit", "system-ui", "sans-serif"],

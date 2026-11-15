@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html class="dark" lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,19 +7,6 @@
       name="description"
       content="Analyze any website for SEO, accessibility, performance, and more — with AI-powered developer reports."
     />
-    <script>
-      (function () {
-        try {
-          var k = "ai-analyzer-theme";
-          var s = localStorage.getItem(k);
-          var dark = true;
-          if (s === "light") dark = false;
-          else if (s === "dark") dark = true;
-          else dark = !window.matchMedia("(prefers-color-scheme: light)").matches;
-          document.documentElement.classList.toggle("dark", dark);
-        } catch (e) {}
-      })();
-    </script>
     <title>AI Website Analyzer</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -28,7 +15,7 @@
       rel="stylesheet"
     />
   </head>
-  <body class="bg-[#f0ebe3] text-slate-900 antialiased dark:bg-[#06080f] dark:text-slate-100">
+  <body class="antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

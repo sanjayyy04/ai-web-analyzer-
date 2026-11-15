@@ -15,14 +15,14 @@ const STEPS = [
     step: 3,
     title: "Review your developer report",
     description:
-      "Get category scores plus impact and fix guidance for each issue—optionally rewritten into plain language when an OpenAI API key is configured.",
+      "Get category scores plus impact and fix guidance for each issue—optionally rewritten into plain language when a Gemini API key is configured.",
   },
 ] as const;
 
 function StepBadge({ n }: { n: number }) {
   return (
     <span
-      className="mx-auto flex h-11 w-11 items-center justify-center rounded-lg bg-sky-100 text-lg font-semibold text-sky-800 dark:bg-cyan-950/80 dark:text-cyan-300"
+      className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--accent-soft)] text-lg font-semibold text-[var(--accent-strong)]"
       aria-hidden
     >
       {n}
@@ -33,12 +33,12 @@ function StepBadge({ n }: { n: number }) {
 export function HowItWorks() {
   return (
     <div
-      className="w-full rounded-2xl border border-slate-200/80 bg-white/95 px-6 py-14 shadow-sm dark:border-white/10 dark:bg-white/[0.06] sm:px-10"
+      className="surface-panel w-full px-6 py-12 sm:px-10 sm:py-14"
       aria-labelledby="how-it-works-heading"
     >
       <h2
         id="how-it-works-heading"
-        className="text-center font-display text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl"
+        className="section-title text-center"
       >
         How to get started with AI Website Analyzer
       </h2>
@@ -47,10 +47,10 @@ export function HowItWorks() {
         {STEPS.map((item) => (
           <li key={item.step} className="flex flex-col items-center text-center">
             <StepBadge n={item.step} />
-            <h3 className="mt-5 font-display text-lg font-semibold text-slate-900 dark:text-white">
+            <h3 className="mt-5 font-display text-lg font-semibold text-[var(--text)]">
               {item.title}
             </h3>
-            <p className="mt-3 max-w-xs text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+            <p className="mt-3 max-w-xs text-sm leading-relaxed text-[var(--text-soft)]">
               {item.description}
             </p>
           </li>

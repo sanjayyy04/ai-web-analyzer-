@@ -48,10 +48,23 @@ CLIENT_ORIGIN=https://your-domain.com
 ## Features
 
 - URL analysis via Lighthouse (Performance, Accessibility, SEO, Best Practices)
+- Dedicated `/analyze` progress page for live wireframing and scanning, followed by `/report` with scores, charts, findings, and report exports
 - HTML content signals (title, meta, headings, alt text, word count)
 - UX heuristics bundle
 - AI humanized reports with fixes and sample code (when `GEMINI_API_KEY` is set) or rule-based fallback
-- Dark / light theme, sticky header, wireframe loading state
+- Pure-black theme, sticky header, wireframe loading state
+
+## Deploy frontend to GitHub Pages
+
+The `Deploy frontend to GitHub Pages` workflow builds and publishes the Vite client on pushes to `main` and on manual runs. Enable **Settings → Pages → Build and deployment → GitHub Actions** in the repository to activate it. The build configures the repository subpath and preserves the `/analyze` and `/report` routes on refresh.
+
+GitHub Pages hosts only the static frontend; it does not run the Express/Lighthouse API. To enable audits on the deployed site, add a repository Actions variable named `VITE_API_BASE_URL` with the public origin of a separately hosted API (for example, `https://api.example.com`). Configure that API's `CLIENT_ORIGIN` to allow `https://sanjayyy04.github.io`. If the variable is omitted, the frontend still deploys, but audit requests need a reachable API.
+
+## Deploy backend to Render
+
+Create a Render Web Service using the repository root as the build context and `Dockerfile` as the Dockerfile path. The image installs Chromium for Lighthouse, runs the API only, and listens on Render's `PORT`. Set the optional Render health check path to `/api/health`.
+
+Set `CLIENT_ORIGIN` to `https://sanjayyy04.github.io` in the Render environment (add other permitted frontend origins if needed). After Render provides the service URL, set the GitHub repository variable `VITE_API_BASE_URL` to that origin and rerun the Pages workflow. Set `GEMINI_API_KEY` in Render only if AI-enhanced reports are desired.
 
 ## Scripts
 

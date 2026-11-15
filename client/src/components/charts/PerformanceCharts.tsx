@@ -45,7 +45,7 @@ export function PerformanceCharts({ performanceScore, metrics }: Props) {
 
   if (metrics.length === 0) {
     return (
-      <p className="text-sm text-slate-500 dark:text-slate-400">
+      <p className="text-sm text-[var(--text-soft)]">
         No performance timing data from this audit run.
       </p>
     );
@@ -54,8 +54,8 @@ export function PerformanceCharts({ performanceScore, metrics }: Props) {
   return (
     <div className="space-y-8">
       <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-        <div className="flex shrink-0 flex-col items-center rounded-2xl border border-slate-200/80 bg-white/70 px-8 py-6 dark:border-white/10 dark:bg-ink-900/60">
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <div className="flex shrink-0 flex-col items-center rounded-2xl border border-[var(--border)] bg-[var(--surface-subtle)] px-8 py-6">
+          <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-soft)]">
             Performance score
           </p>
           <p
@@ -64,16 +64,16 @@ export function PerformanceCharts({ performanceScore, metrics }: Props) {
           >
             {performanceScore === null ? "—" : performanceScore}
           </p>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">out of 100</p>
+          <p className="mt-1 text-xs text-[var(--text-soft)]">out of 100</p>
         </div>
       </div>
 
       {timingData.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+          <h3 className="text-sm font-semibold text-[var(--text)]">
             Load timing (milliseconds)
           </h3>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          <p className="mt-1 text-xs text-[var(--text-soft)]">
             Lower bars are better for FCP, LCP, TBT, Speed Index, and TTI.
           </p>
           <div className="mt-4 h-64 w-full">
@@ -116,10 +116,10 @@ export function PerformanceCharts({ performanceScore, metrics }: Props) {
       )}
 
       <div>
-        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+        <h3 className="text-sm font-semibold text-[var(--text)]">
           Metric health (Lighthouse score per metric)
         </h3>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        <p className="mt-1 text-xs text-[var(--text-soft)]">
           How each Core Web Vital and timing audit scored (0–100).
         </p>
         <div className="mt-4 h-56 w-full">

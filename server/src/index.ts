@@ -16,6 +16,7 @@ dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV === "production";
+const serveClient = process.env.SERVE_CLIENT !== "false";
 const clientDist = path.resolve(__dirname, "../../client/dist");
 
 const app = express();
@@ -102,9 +103,16 @@ app.post("/api/analyze", async (req, res) => {
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        const safeMsg = msg
+          .split(apiKey)
+          .join("[REDACTED]")
+          .replace(/\bAIza[0-9A-Za-z_-]{20,}\b/g, "[REDACTED]");
         report = humanizeOffline(payload);
         aiModel = "fallback";
-        note = `Gemini API error: ${msg}. Showing rule-based fixes with sample code.`;
+        console.error(`Gemini API request failed: ${safeMsg}`);
+        note = isProd
+          ? "Gemini request failed; rule-based fixes are shown. Check the backend logs."
+          : `Gemini API error: ${safeMsg}. Showing rule-based fixes.`;
       }
     } else {
       report = humanizeOffline(payload);
@@ -143,7 +151,7 @@ app.post("/api/analyze", async (req, res) => {
   }
 });
 
-if (isProd && fs.existsSync(clientDist)) {
+if (isProd && serveClient && fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));
   app.get("*", (req, res, next) => {
     if (req.path.startsWith("/api")) {
@@ -152,7 +160,7 @@ if (isProd && fs.existsSync(clientDist)) {
     }
     res.sendFile(path.join(clientDist, "index.html"));
   });
-} else if (isProd) {
+} else if (isProd && serveClient) {
   console.warn(
     `Production mode: client build not found at ${clientDist}. Run "npm run build" from project root.`,
   );
@@ -160,7 +168,7 @@ if (isProd && fs.existsSync(clientDist)) {
 
 const port = Number(process.env.PORT) || 8787;
 app.listen(port, () => {
-  if (isProd && fs.existsSync(clientDist)) {
+  if (isProd && serveClient && fs.existsSync(clientDist)) {
     console.log(`AI Web Analyzer running at http://localhost:${port}`);
   } else {
     console.log(`AI Web Analyzer API listening on http://localhost:${port}`);

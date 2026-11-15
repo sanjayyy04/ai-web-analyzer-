@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ResponsiveCarousel } from "./ResponsiveCarousel";
 
 const AUDIT_AREAS = [
   {
@@ -11,7 +12,7 @@ const AUDIT_AREAS = [
         <path strokeLinecap="round" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
       </svg>
     ),
-    iconClass: "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300",
+    iconClass: "bg-[var(--accent-soft)] text-[var(--accent-strong)]",
   },
   {
     id: "seo",
@@ -24,7 +25,7 @@ const AUDIT_AREAS = [
         <path strokeLinecap="round" d="M20 20l-3-3" />
       </svg>
     ),
-    iconClass: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300",
+    iconClass: "bg-[var(--surface-muted)] text-[var(--text)]",
   },
   {
     id: "a11y",
@@ -37,7 +38,7 @@ const AUDIT_AREAS = [
         <path strokeLinecap="round" d="M12 6v6M8 20l4-6 4 6M6 10h12" />
       </svg>
     ),
-    iconClass: "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300",
+    iconClass: "bg-[var(--surface-muted)] text-[var(--text)]",
   },
   {
     id: "best-practices",
@@ -49,7 +50,7 @@ const AUDIT_AREAS = [
         <path strokeLinecap="round" d="M12 3l7 4v5c0 4-3 7-7 9-4-2-7-5-7-9V7l7-4z" />
       </svg>
     ),
-    iconClass: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+    iconClass: "bg-[var(--surface-muted)] text-[var(--text)]",
   },
   {
     id: "content",
@@ -61,9 +62,17 @@ const AUDIT_AREAS = [
         <path strokeLinecap="round" d="M4 6h16M4 12h10M4 18h14" />
       </svg>
     ),
-    iconClass: "bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-950/60 dark:text-fuchsia-300",
+    iconClass: "bg-[var(--surface-muted)] text-[var(--text)]",
   },
 ] as const;
+
+type StickyAuditSectionProps = {
+  url: string;
+  onUrlChange: (value: string) => void;
+  onAnalyze: (event: FormEvent<HTMLFormElement>) => void;
+  canSubmit: boolean;
+  error: string | null;
+};
 
 function AuditCard({
   title,
@@ -91,7 +100,7 @@ function AuditCard({
   return (
     <article
       ref={ref}
-      className={`flex gap-4 rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm transition-all duration-700 ease-out dark:border-white/10 dark:bg-white/[0.07] ${
+      className={`flex gap-4 rounded-xl border border-[var(--border)] bg-[var(--panel-strong)] p-5 shadow-sm transition-all duration-300 ease-out ${
         visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
       }`}
       style={{ transitionDelay: `${index * 80}ms` }}
@@ -100,48 +109,81 @@ function AuditCard({
         {icon}
       </div>
       <div className="min-w-0">
-        <h3 className="font-display text-base font-semibold text-slate-900 dark:text-white">{title}</h3>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400">{description}</p>
+        <h3 className="font-display text-base font-semibold text-[var(--text)]">{title}</h3>
+        <p className="mt-2 text-sm leading-relaxed text-[var(--text-soft)]">{description}</p>
       </div>
     </article>
   );
 }
 
-export function StickyAuditSection() {
+export function StickyAuditSection({
+  url,
+  onUrlChange,
+  onAnalyze,
+  canSubmit,
+  error,
+}: StickyAuditSectionProps) {
   return (
     <div
-      className="w-full rounded-2xl border border-slate-200/80 bg-[#f8f9fb] px-6 py-12 dark:border-white/10 dark:bg-white/[0.04] sm:px-10 sm:py-14"
+      className="surface-panel w-full px-6 py-12 sm:px-10 sm:py-14"
       aria-labelledby="audit-guides-heading"
     >
       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-14 xl:gap-20">
         <aside className="mb-10 lg:sticky lg:top-[max(5.5rem,calc(50vh-10rem))] lg:mb-0 lg:self-start">
           <h2
             id="audit-guides-heading"
-            className="font-display text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-[1.75rem]"
+            className="font-display text-2xl font-semibold tracking-tight text-[var(--text)] sm:text-[1.75rem]"
           >
             Ways to get started
           </h2>
-          <p className="mt-4 max-w-md text-base leading-relaxed text-slate-600 dark:text-slate-400">
+          <p className="mt-4 max-w-md text-base leading-relaxed text-[var(--text-soft)]">
             Jump into automated audits, category scores, and AI-friendly reports—everything you need to
             understand and improve your site in one workflow.
           </p>
-          <a
-            href="#analyze"
-            className="mt-8 inline-flex items-center justify-center rounded-full bg-sky-100 px-7 py-3 text-sm font-semibold text-sky-900 transition hover:bg-sky-200 dark:bg-cyan-950/80 dark:text-cyan-200 dark:hover:bg-cyan-900/60"
+          <form
+            id="analyze"
+            onSubmit={onAnalyze}
+            className="mt-8 rounded-2xl border border-[var(--border)] bg-[var(--panel-strong)] p-4"
           >
-            Launch audit
-          </a>
+            <label htmlFor="url" className="block text-sm font-medium text-[var(--text)]">
+              Target URL
+            </label>
+            <input
+              id="url"
+              name="url"
+              type="url"
+              placeholder="https://example.com"
+              value={url}
+              onChange={(event) => onUrlChange(event.target.value)}
+              className="input-control mt-2"
+            />
+            <button type="submit" disabled={!canSubmit} className="btn-primary mt-3 w-full">
+              Launch audit
+            </button>
+            <p className="mt-3 text-xs leading-relaxed text-[var(--text-soft)]">
+              First run may take 1–3 minutes. Keep this tab open.
+            </p>
+            {error && (
+              <p
+                className="mt-3 rounded-lg border border-[var(--score-warning)] bg-[var(--surface-subtle)] px-3 py-2 text-sm text-[var(--text)]"
+                role="alert"
+              >
+                {error}
+              </p>
+            )}
+          </form>
+
         </aside>
 
         <div className="min-w-0">
-          <h2 className="mb-6 font-display text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-[1.75rem]">
+          <h2 className="mb-6 font-display text-2xl font-semibold tracking-tight text-[var(--text)] sm:text-[1.75rem]">
             What we analyze
           </h2>
-          <div className="flex flex-col gap-5 pb-8 lg:pb-32">
+          <ResponsiveCarousel ariaLabel="Website analysis areas" className="flex flex-col gap-5 pb-8 lg:pb-32">
             {AUDIT_AREAS.map((area, i) => (
               <AuditCard key={area.id} {...area} index={i} />
             ))}
-          </div>
+          </ResponsiveCarousel>
         </div>
       </div>
     </div>

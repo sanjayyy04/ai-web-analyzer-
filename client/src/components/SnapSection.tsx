@@ -23,7 +23,7 @@ export function SnapSection({
         size === "screen" ? "snap-section-screen" : "snap-section-auto"
       } ${className}`}
     >
-      <div className={`mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 ${innerClassName}`}>
+      <div className={`content-container ${innerClassName}`}>
         {children}
       </div>
     </section>

@@ -1,25 +1,25 @@
 export function scoreBarColor(score: number | null): string {
-  if (score === null) return "#94a3b8";
-  if (score >= 90) return "#10b981";
-  if (score >= 50) return "#f59e0b";
-  return "#f43f5e";
+  if (score === null) return "#858b82";
+  if (score >= 90) return "#a7e44c";
+  if (score >= 50) return "#ead35a";
+  return "#777d75";
 }
 
 export function scoreHexFromPercent(score: number | null): string {
-  if (score === null) return "#94a3b8";
-  if (score >= 90) return "#10b981";
-  if (score >= 50) return "#f59e0b";
-  return "#f43f5e";
+  if (score === null) return "#858b82";
+  if (score >= 90) return "#a7e44c";
+  if (score >= 50) return "#ead35a";
+  return "#777d75";
 }
 
 export function chartAxis(isDark: boolean): string {
-  return isDark ? "#94a3b8" : "#64748b";
+  return isDark ? "#a5aaa1" : "#5d625b";
 }
 
 export function chartGrid(isDark: boolean): string {
-  return isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)";
+  return isDark ? "rgba(255,255,255,0.12)" : "rgba(23,25,22,0.12)";
 }
 
 export function chartTooltipBg(isDark: boolean): string {
-  return isDark ? "#1e293b" : "#ffffff";
+  return isDark ? "#111311" : "#ffffff";
 }

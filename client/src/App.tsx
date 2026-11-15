@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { AnalysisWireframe } from "./components/AnalysisWireframe";
-import { OverallScoreChart } from "./components/charts/OverallScoreChart";
-import { PerformanceCharts } from "./components/charts/PerformanceCharts";
-import { DownloadReport } from "./components/DownloadReport";
-import { FindingCard } from "./components/FindingCard";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { AuditProgressPage } from "./components/AuditProgressPage";
+import { AuditReportPage } from "./components/AuditReportPage";
 import { FeatureGrid } from "./components/FeatureGrid";
+import { FaqSection } from "./components/FaqSection";
 import { HowItWorks } from "./components/HowItWorks";
+import { ProductShowcase } from "./components/ProductShowcase";
 import { SnapSection } from "./components/SnapSection";
 import { SiteFooter } from "./components/SiteFooter";
 import { SiteHeader } from "./components/SiteHeader";
@@ -13,68 +12,268 @@ import { StickyAuditSection } from "./components/StickyAuditSection";
 import { VintageBackdrop } from "./components/VintageBackdrop";
 import type { AnalyzeResponse } from "./types";
 
-const SCORE_KEYS = [
-  ["performance", "Performance"],
-  ["accessibility", "Accessibility"],
-  ["seo", "SEO"],
-  ["best-practices", "Best practices"],
-  ["ux", "UX"],
-  ["content", "Content"],
-] as const;
+const ANALYZE_PATH = "/analyze";
+const REPORT_PATH = "/report";
+const APP_BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, "");
+const REPORT_STORAGE_KEY = "ai-analyzer-latest-report";
 
-function scoreColor(score: number | null): string {
-  if (score === null) return "bg-slate-400 dark:bg-slate-600";
-  if (score >= 90) return "bg-emerald-500";
-  if (score >= 50) return "bg-amber-500";
-  return "bg-rose-500";
+type AppPage = "home" | "analyze" | "report";
+
+function appPath(path: string): string {
+  const withLeadingSlash = path.startsWith("/") ? path : `/${path}`;
+  return `${APP_BASE_PATH}${withLeadingSlash}` || "/";
+}
+
+function getPageFromPath(): AppPage {
+  let pathname = window.location.pathname;
+  if (
+    APP_BASE_PATH &&
+    (pathname === APP_BASE_PATH || pathname.startsWith(`${APP_BASE_PATH}/`))
+  ) {
+    pathname = pathname.slice(APP_BASE_PATH.length) || "/";
+  }
+  const path = pathname.replace(/\/$/, "") || "/";
+  if (path === ANALYZE_PATH) return "analyze";
+  if (path === REPORT_PATH) return "report";
+  return "home";
+}
+
+function normalizeTargetUrl(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(candidate);
+    if (!["http:", "https:"].includes(parsed.protocol) || !parsed.hostname) return null;
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
+function isAnalyzeResponse(value: unknown): value is AnalyzeResponse {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("url" in value) || typeof value.url !== "string") return false;
+  if (!("fetchedAt" in value) || typeof value.fetchedAt !== "string") return false;
+  if (!("scores" in value) || typeof value.scores !== "object" || value.scores === null) return false;
+  if (!("report" in value) || !Array.isArray(value.report)) return false;
+  return value.report.every(
+    (section: unknown) =>
+      typeof section === "object" &&
+      section !== null &&
+      "category" in section &&
+      typeof section.category === "string" &&
+      "headline" in section &&
+      typeof section.headline === "string" &&
+      "findings" in section &&
+      Array.isArray(section.findings) &&
+      section.findings.every(
+        (finding: unknown) =>
+          typeof finding === "object" &&
+          finding !== null &&
+          "summary" in finding &&
+          typeof finding.summary === "string" &&
+          "impact" in finding &&
+          typeof finding.impact === "string" &&
+          "fix" in finding &&
+          typeof finding.fix === "string",
+      ),
+  );
+}
+
+function readSavedReport(): AnalyzeResponse | null {
+  try {
+    const saved = window.sessionStorage.getItem(REPORT_STORAGE_KEY);
+    if (!saved) return null;
+    const parsed: unknown = JSON.parse(saved);
+    return isAnalyzeResponse(parsed) ? parsed : null;
+  } catch (error) {
+    console.warn("Could not restore the saved audit report.", error);
+    return null;
+  }
 }
 
 export default function App() {
   const [url, setUrl] = useState("https://web.dev");
+  const [analysisUrl, setAnalysisUrl] = useState(() => {
+    const stateUrl = window.history.state?.url;
+    return typeof stateUrl === "string" ? stateUrl : "";
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<AnalyzeResponse | null>(null);
+  const [data, setData] = useState<AnalyzeResponse | null>(() => readSavedReport());
+  const [page, setPage] = useState<AppPage>(getPageFromPath);
+  const requestController = useRef<AbortController | null>(null);
 
   const canSubmit = useMemo(
-    () => url.trim().length > 0 && !loading,
+    () => normalizeTargetUrl(url) !== null && !loading,
     [url, loading],
   );
 
   useEffect(() => {
-    if (data && !loading) {
-      document.getElementById("results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    function syncRoute() {
+      const currentPage = getPageFromPath();
+      setPage(currentPage);
+      if (currentPage === "analyze" && typeof window.history.state?.url === "string") {
+        setAnalysisUrl(window.history.state.url);
+      }
+      if (currentPage === "report") {
+        setData((current) => current ?? readSavedReport());
+      } else if (window.location.hash) {
+        window.requestAnimationFrame(() => {
+          document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: "start" });
+        });
+      }
     }
-  }, [data, loading]);
 
-  async function onAnalyze(e: FormEvent) {
-    e.preventDefault();
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, []);
+
+  useEffect(() => {
+    if (page !== "analyze") requestController.current?.abort();
+  }, [page]);
+
+  useEffect(() => {
+    document.title =
+      page === "report"
+        ? "Audit Report | AI Website Analyzer"
+        : page === "analyze"
+          ? "Analyzing Website | AI Website Analyzer"
+          : "AI Website Analyzer";
+  }, [page]);
+
+  async function runAnalysis(targetUrl: string) {
     setError(null);
     setData(null);
+    setAnalysisUrl(targetUrl);
+    setUrl(targetUrl);
     setLoading(true);
+    const controller = new AbortController();
+    requestController.current?.abort();
+    requestController.current = controller;
+
     try {
-      const res = await fetch("/api/analyze", {
+      const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+      const res = await fetch(`${apiBaseUrl}/api/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim() }),
+        body: JSON.stringify({ url: targetUrl }),
+        signal: controller.signal,
       });
-      const json = await res.json();
+      const json: unknown = await res.json();
+      if (controller.signal.aborted) return;
       if (!res.ok) {
-        setError(json.error || "Request failed");
+        const message =
+          typeof json === "object" && json !== null && "error" in json && typeof json.error === "string"
+            ? json.error
+            : "Request failed";
+        setError(message);
         return;
       }
-      setData(json as AnalyzeResponse);
-    } catch {
-      setError("Network error. Is the API running on port 8787?");
+      if (!isAnalyzeResponse(json)) {
+        setError("The analyzer returned an unexpected response. Please try again.");
+        return;
+      }
+      setData(json);
+      try {
+        window.sessionStorage.setItem(REPORT_STORAGE_KEY, JSON.stringify(json));
+      } catch (storageError) {
+        console.warn("Could not save the audit report for refresh.", storageError);
+      }
+      window.history.replaceState(
+        { page: "analyze", url: targetUrl, completed: true },
+        "",
+        appPath(ANALYZE_PATH),
+      );
+      window.history.pushState({ page: "report" }, "", appPath(REPORT_PATH));
+      setPage("report");
+      window.scrollTo({ top: 0, behavior: "instant" });
+    } catch (requestError) {
+      if (requestError instanceof DOMException && requestError.name === "AbortError") return;
+      setError("Could not reach the analyzer API. Check its URL and availability.");
     } finally {
-      setLoading(false);
+      if (requestController.current === controller) {
+        requestController.current = null;
+        setLoading(false);
+      }
     }
   }
 
-  const panel =
-    "rounded-2xl border border-slate-400/70 bg-white/90 p-6 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-white/10 dark:bg-white/5 dark:shadow-none";
+  async function onAnalyze(e: FormEvent) {
+    e.preventDefault();
+    const targetUrl = normalizeTargetUrl(url);
+    if (!targetUrl) {
+      setError("Enter a valid http(s) website URL.");
+      return;
+    }
+    window.history.pushState({ page: "analyze", url: targetUrl }, "", appPath(ANALYZE_PATH));
+    setPage("analyze");
+    window.scrollTo({ top: 0, behavior: "instant" });
+    await runAnalysis(targetUrl);
+  }
+
+  function returnToAnalyzer() {
+    window.history.pushState({ page: "home" }, "", appPath("/"));
+    setPage("home");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  function startNewAudit() {
+    if (data) setUrl(data.url);
+    setData(null);
+    setError(null);
+    window.history.pushState({ page: "home" }, "", appPath("/#analyze"));
+    setPage("home");
+    window.requestAnimationFrame(() => {
+      document.getElementById("analyze")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function returnToUrlForm() {
+    setError(null);
+    window.history.pushState({ page: "home" }, "", appPath("/#analyze"));
+    setPage("home");
+    window.requestAnimationFrame(() => {
+      document.getElementById("analyze")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  if (page === "analyze") {
+    return (
+      <>
+        <VintageBackdrop />
+        <AuditProgressPage
+          url={analysisUrl}
+          loading={loading}
+          error={error}
+          completed={Boolean(
+            data &&
+              data.url === analysisUrl &&
+              window.history.state?.completed === true,
+          )}
+          onBack={returnToUrlForm}
+          onRetry={() => void runAnalysis(analysisUrl)}
+          onViewReport={() => {
+            window.history.pushState({ page: "report" }, "", appPath(REPORT_PATH));
+            setPage("report");
+          }}
+        />
+      </>
+    );
+  }
+
+  if (page === "report") {
+    return (
+      <>
+        <VintageBackdrop />
+        <AuditReportPage data={data} onBack={returnToAnalyzer} onNewAudit={startNewAudit} />
+      </>
+    );
+  }
 
   return (
-    <div className="relative min-h-screen text-slate-900 dark:text-slate-100">
+    <div className="app-shell">
       <VintageBackdrop />
       <SiteHeader />
 
@@ -84,29 +283,35 @@ export default function App() {
           id="top"
           className="snap-section snap-section-screen relative flex w-full flex-col justify-center scroll-mt-[4.5rem]"
         >
-          <div className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
+          <div className="content-container">
             <div className="max-w-2xl text-center sm:text-left">
-              <p className="text-sm font-medium uppercase tracking-[0.35em] text-indigo-800 dark:text-cyan-300/90">
-                AI-Powered Web Intelligence
+              <p className="hero-orbit-badge">
+                <svg viewBox="0 0 300 44" preserveAspectRatio="none" aria-hidden>
+                  <rect
+                    className="hero-orbit-stroke"
+                    x="0.75"
+                    y="0.75"
+                    width="298.5"
+                    height="42.5"
+                    rx="21"
+                    pathLength="354"
+                  />
+                </svg>
+                <span className="h-2 w-2 rounded-full bg-[var(--accent)]" aria-hidden />
+                AI-powered website analysis
               </p>
-              <h1 className="mt-3 font-display text-4xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-5xl lg:text-6xl">
+              <h1 className="mt-3 font-display text-4xl font-bold tracking-tight text-[var(--text)] sm:text-5xl lg:text-6xl">
                 Decode Your Website’s Intelligence Layer
               </h1>
-              <p className="mt-4 text-lg text-slate-600 dark:text-slate-300 sm:text-xl">
+              <p className="mt-4 text-lg text-[var(--text-soft)] sm:text-xl">
                 Dive into the hidden layers of your website. Reveal performance, structure, and
                 usability issues — translated into actionable intelligence.
               </p>
               <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:items-start">
-                <a
-                  href="#analyze"
-                  className="inline-flex min-h-[48px] items-center justify-center rounded-full bg-indigo-600 px-8 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:bg-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-                >
+                <a href="#analyze" className="btn-primary">
                   Launch audit
                 </a>
-                <a
-                  href="#how-it-works"
-                  className="inline-flex min-h-[48px] items-center justify-center rounded-full border border-slate-400/60 bg-white/70 px-8 py-3 text-sm font-semibold text-slate-800 transition hover:border-indigo-400/60 dark:border-white/15 dark:bg-white/10 dark:text-slate-200"
-                >
+                <a href="#how-it-works" className="btn-secondary">
                   How it works
                 </a>
               </div>
@@ -114,7 +319,7 @@ export default function App() {
           </div>
           <a
             href="#how-it-works"
-            className="absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center gap-1 text-xs font-medium uppercase tracking-widest text-slate-500 transition hover:text-indigo-700 dark:text-slate-400 dark:hover:text-cyan-300"
+            className="absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center gap-1 text-xs font-medium uppercase tracking-widest text-[var(--text-soft)] transition hover:text-[var(--text)]"
             aria-label="Scroll to next section"
           >
             <span>Scroll</span>
@@ -131,185 +336,55 @@ export default function App() {
           </a>
         </section>
 
+        <ProductShowcase />
+
         <SnapSection id="how-it-works">
           <HowItWorks />
         </SnapSection>
 
         <SnapSection id="audit-guides" size="auto" innerClassName="py-8">
-          <StickyAuditSection />
+          <StickyAuditSection
+            url={url}
+            onUrlChange={setUrl}
+            onAnalyze={onAnalyze}
+            canSubmit={canSubmit}
+            error={error}
+          />
         </SnapSection>
 
         <SnapSection id="features">
-          <h2 className="mb-8 text-center font-display text-2xl font-bold text-slate-900 dark:text-white sm:text-left sm:text-3xl">
+          <h2 className="section-title mb-8 text-center sm:text-left">
             What we measure
           </h2>
           <FeatureGrid />
         </SnapSection>
 
-        <SnapSection id="analyze">
-          <form onSubmit={onAnalyze} className={panel}>
-            <label
-              htmlFor="url"
-              className="block text-sm font-medium text-slate-800 dark:text-slate-200"
-            >
-              Target URL
-            </label>
-            <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-              <input
-                id="url"
-                name="url"
-                type="url"
-                placeholder="https://example.com"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                className="w-full rounded-xl border border-slate-400/50 bg-white/80 px-4 py-3 text-base text-slate-900 outline-none ring-indigo-500/20 placeholder:text-slate-400 focus:ring-2 dark:border-white/10 dark:bg-ink-900/80 dark:text-white dark:placeholder:text-slate-500"
-              />
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                className="inline-flex min-h-[48px] items-center justify-center rounded-xl bg-indigo-600 px-8 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-400"
-              >
-                {loading ? "Scanning…" : "Launch audit"}
-              </button>
-            </div>
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-              First run may take 1–3 minutes. Keep this tab open.
-            </p>
-          </form>
+        <FaqSection />
 
-          {error && (
-            <div className="mt-6 rounded-xl border border-rose-400/50 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-100">
-              {error}
-            </div>
-          )}
-
-          {loading && (
-            <div className="mt-8">
-              <AnalysisWireframe />
-            </div>
-          )}
-        </SnapSection>
-
-        {data && !loading && (
-          <SnapSection id="results" size="auto" innerClassName="py-10">
-            <div className="w-full space-y-8">
-              {data.note && (
-                <div className="rounded-xl border border-cyan-500/40 bg-cyan-50 px-4 py-3 text-sm text-cyan-950 dark:border-cyan-500/30 dark:bg-cyan-950/30 dark:text-cyan-100">
-                  {data.note}
-                </div>
-              )}
-
-              <DownloadReport data={data} />
-
-              <section className={panel}>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <h2 className="font-display text-xl font-semibold text-slate-900 dark:text-white">
-                      Scores
-                    </h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {data.url} · {new Date(data.fetchedAt).toLocaleString()}
-                      {data.auditMeta
-                        ? ` · Lighthouse ${data.auditMeta.lighthouseVersion} (${data.auditMeta.formFactor})`
-                        : ""}
-                      {data.aiModel && data.aiModel !== "fallback"
-                        ? ` · model: ${data.aiModel}`
-                        : ""}
-                    </p>
-                  </div>
-                </div>
-                {data.auditMeta && (
-                  <p className="mt-4 rounded-lg border border-amber-400/40 bg-amber-50/80 px-3 py-2 text-xs text-amber-950 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-100">
-                    Scores may differ from Chrome DevTools if device mode differs (this run:{" "}
-                    <strong>{data.auditMeta.formFactor}</strong>). UX and Content are app
-                    heuristics, not Lighthouse. Set{" "}
-                    <code className="rounded bg-black/10 px-1 dark:bg-white/10">
-                      LIGHTHOUSE_FORM_FACTOR=desktop
-                    </code>{" "}
-                    in server/.env to match desktop DevTools audits.
-                  </p>
-                )}
-                <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {SCORE_KEYS.map(([key, label]) => {
-                    const v = data.scores[key] ?? null;
-                    return (
-                      <div
-                        key={key}
-                        className="rounded-xl border border-slate-200/80 bg-white/70 p-4 dark:border-white/10 dark:bg-ink-900/60"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                            {label}
-                          </p>
-                          <span
-                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${scoreColor(v)}`}
-                            title={v === null ? "n/a" : `${v}`}
-                          />
-                        </div>
-                        <p className="mt-2 font-display text-3xl font-bold tabular-nums text-slate-900 dark:text-white">
-                          {v === null ? "—" : `${v}`}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <section className={panel}>
-                <h2 className="font-display text-xl font-semibold text-slate-900 dark:text-white">
-                  Performance charts
+        <section className="content-container pb-14 sm:pb-20">
+          <div className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-subtle)] px-6 py-10 sm:px-10 sm:py-12">
+            <div className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full border border-[var(--border-strong)] opacity-50" aria-hidden />
+            <div className="pointer-events-none absolute -right-2 -top-10 h-36 w-36 rounded-full border border-[var(--border-strong)] opacity-50" aria-hidden />
+            <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+              <div className="max-w-2xl">
+                <p className="section-kicker">Make your next change count</p>
+                <h2 className="mt-3 font-display text-2xl font-semibold tracking-tight text-[var(--text)] sm:text-3xl">
+                  Start with a clearer picture of your website.
                 </h2>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Core Web Vitals timing and per-metric Lighthouse scores.
+                <p className="mt-3 text-sm leading-relaxed text-[var(--text-soft)] sm:text-base">
+                  Run a Lighthouse audit and turn the results into practical next steps.
                 </p>
-                <div className="mt-6">
-                  <PerformanceCharts
-                    performanceScore={data.scores.performance ?? null}
-                    metrics={data.performanceMetrics ?? []}
-                  />
-                </div>
-              </section>
-
-              <section className={panel}>
-                <h2 className="font-display text-xl font-semibold text-slate-900 dark:text-white">
-                  Overall audit summary
-                </h2>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Final radar and bar chart across all measured categories.
-                </p>
-                <div className="mt-6">
-                  <OverallScoreChart scores={data.scores} />
-                </div>
-              </section>
-
-              <section>
-                <h2 className="font-display text-2xl font-semibold text-slate-900 dark:text-white">
-                  Developer report
-                </h2>
-                <p className="mt-1 text-slate-600 dark:text-slate-400">
-                  Each issue includes impact, an AI fix, and copy-paste sample code when applicable.
-                </p>
-                <div className="mt-6 space-y-6">
-                  {data.report.map((section) => (
-                    <article
-                      key={section.category + section.headline}
-                      className="rounded-2xl border border-slate-300/50 bg-gradient-to-br from-white/80 to-white/40 p-6 dark:border-white/10 dark:from-white/10 dark:to-white/5"
-                    >
-                      <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-white">
-                        {section.headline}
-                      </h3>
-                      <ul className="mt-4 space-y-4">
-                        {section.findings.map((f, i) => (
-                          <FindingCard key={i} finding={f} />
-                        ))}
-                      </ul>
-                    </article>
-                  ))}
-                </div>
-              </section>
+              </div>
+              <a href="#analyze" className="btn-primary shrink-0">
+                Run an audit
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
+                </svg>
+              </a>
             </div>
-          </SnapSection>
-        )}
+          </div>
+        </section>
+
       </main>
 
       <SiteFooter />

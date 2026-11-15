@@ -44,7 +44,13 @@ Return ONLY valid JSON:
   ]
 }`;
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+
+function isModelUnavailable(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b404\b/.test(message) && /model/i.test(message) && /not found|no longer available/i.test(message);
+}
 
 function extractJson(text: string): string {
   const trimmed = text.trim();
@@ -61,15 +67,6 @@ export async function humanizeWithGemini(
   apiKey: string
 ): Promise<{ report: HumanizedSection[]; model: string }> {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
-    systemInstruction: SYSTEM,
-    generationConfig: {
-      temperature: 0.3,
-      responseMimeType: "application/json",
-    },
-  });
-
   const userPayload = {
     url: raw.url,
     lighthouseVersion: raw.lighthouseVersion,
@@ -77,9 +74,30 @@ export async function humanizeWithGemini(
     content: raw.content,
   };
 
-  const result = await model.generateContent(
-    `Analyze this website audit data and return JSON only.\n\nINPUT:\n${JSON.stringify(userPayload)}`,
-  );
+  const prompt = `Analyze this website audit data and return JSON only.\n\nINPUT:\n${JSON.stringify(userPayload)}`;
+  const getModel = (modelName: string) =>
+    genAI.getGenerativeModel({
+      model: modelName,
+      systemInstruction: SYSTEM,
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: "application/json",
+      },
+    });
+
+  let activeModel = GEMINI_MODEL;
+  let result;
+  try {
+    result = await getModel(activeModel).generateContent(prompt);
+  } catch (error) {
+    if (activeModel === DEFAULT_GEMINI_MODEL || !isModelUnavailable(error)) {
+      throw error;
+    }
+
+    console.warn(`Gemini model "${activeModel}" is unavailable; retrying with "${DEFAULT_GEMINI_MODEL}".`);
+    activeModel = DEFAULT_GEMINI_MODEL;
+    result = await getModel(activeModel).generateContent(prompt);
+  }
 
   const text = result.response.text();
   if (!text) {
@@ -91,7 +109,7 @@ export async function humanizeWithGemini(
     if (!parsed.report || !Array.isArray(parsed.report)) {
       return { report: buildFallbackReport(raw), model: "fallback" };
     }
-    return { report: parsed.report, model: GEMINI_MODEL };
+    return { report: parsed.report, model: activeModel };
   } catch {
     return { report: buildFallbackReport(raw), model: "fallback" };
   }
